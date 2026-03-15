@@ -1,0 +1,6 @@
+{
+  "title": "WOL 控制台",
+  "admin_password": "123456",
+  "default_port": 9,
+  "devices": []
+}

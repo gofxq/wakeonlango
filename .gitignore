@@ -1,0 +1,16 @@
+# Build artifacts
+/wakego
+/bin/
+
+# Runtime files
+/run/
+/logs/
+
+# Go cache
+.gocache
+
+# Local config
+/config.json
+
+# macOS
+.DS_Store

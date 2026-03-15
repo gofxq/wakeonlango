@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --panel: rgba(255, 251, 245, 0.92);
+      --ink: #1e1b18;
+      --muted: #6b6257;
+      --line: rgba(30, 27, 24, 0.12);
+      --brand: #0f766e;
+      --brand-strong: #115e59;
+      --danger: #b91c1c;
+      --shadow: 0 20px 50px rgba(25, 20, 16, 0.12);
+      --radius: 22px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(194, 65, 12, 0.16), transparent 24%),
+        linear-gradient(160deg, #f6f1e7 0%, #ebe2d3 100%);
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 24px));
+      margin: 0 auto;
+      padding: 20px 0 40px;
+    }
+
+    .hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 28px;
+      margin-top: 16px;
+      border-radius: 28px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.92), rgba(248,242,231,0.82));
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 5vw, 52px);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 640px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .panel {
+      background: var(--panel);
+      backdrop-filter: blur(12px);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255,255,255,0.6);
+      box-shadow: var(--shadow);
+    }
+
+    .status {
+      padding: 16px 18px;
+      min-height: 56px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: auto -30px -30px auto;
+      width: 120px;
+      height: 120px;
+      background: radial-gradient(circle, rgba(15,118,110,0.14), transparent 65%);
+      pointer-events: none;
+    }
+
+    .device-name {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    .device-meta {
+      display: grid;
+      gap: 6px;
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 18px;
+      word-break: break-all;
+    }
+
+    .device-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 18px;
+      cursor: pointer;
+      transition: transform 160ms ease, opacity 160ms ease, background 160ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+      transform: none;
+    }
+
+    .primary {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .primary:hover {
+      background: var(--brand-strong);
+    }
+
+    .secondary {
+      background: rgba(30, 27, 24, 0.08);
+      color: var(--ink);
+    }
+
+    .danger {
+      background: rgba(185, 28, 28, 0.12);
+      color: var(--danger);
+    }
+
+    .admin {
+      padding: 22px;
+      display: none;
+      gap: 20px;
+      margin-top: 18px;
+    }
+
+    .admin.visible {
+      display: grid;
+    }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 18px;
+    }
+
+    .section-title {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.82);
+      color: var(--ink);
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .admin-device-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .admin-device-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.64);
+      border: 1px solid rgba(30,27,24,0.08);
+    }
+
+    .admin-device-item strong,
+    .admin-device-item span {
+      display: block;
+    }
+
+    .empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .tiny {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    @media (max-width: 720px) {
+      .hero {
+        padding: 20px;
+        flex-direction: column;
+      }
+
+      .device-actions,
+      .toolbar {
+        width: 100%;
+      }
+
+      .toolbar button,
+      .device-actions button {
+        flex: 1 1 auto;
+      }
+
+      .admin-device-item {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div>
+        <p class="tiny">Wake-on-LAN 控制面板</p>
+        <h1 id="page-title">{{.Title}}</h1>
+        <p>在同一页面完成设备唤醒和设备管理。管理员配置写入本地 JSON 文件，保存后立即生效，无需重启服务。</p>
+      </div>
+      <button id="admin-toggle" class="secondary" type="button">管理员入口</button>
+    </section>
+
+    <div class="toolbar">
+      <button id="refresh-btn" class="secondary" type="button">刷新设备</button>
+      <button id="wake-all-hint" class="secondary" type="button">说明</button>
+    </div>
+
+    <section id="status" class="panel status">正在加载设备列表...</section>
+
+    <section id="device-grid" class="grid" style="margin-top:18px;"></section>
+
+    <section id="admin-panel" class="panel admin">
+      <div class="admin-grid">
+        <div class="stack">
+          <h2 class="section-title">管理员认证</h2>
+          <label>
+            管理员口令
+            <input id="admin-password" type="password" placeholder="输入管理口令">
+          </label>
+          <button id="load-config-btn" class="primary" type="button">读取管理配置</button>
+          <p class="tiny">管理接口通过请求头 `X-Admin-Password` 校验。</p>
+        </div>
+
+        <div class="stack">
+          <h2 class="section-title">基础配置</h2>
+          <label>
+            页面标题
+            <input id="config-title" type="text" placeholder="WOL 控制台">
+          </label>
+          <label>
+            默认唤醒端口
+            <input id="config-default-port" type="number" min="1" max="65535" placeholder="9">
+          </label>
+          <label>
+            新管理员口令
+            <input id="config-admin-password" type="password" placeholder="留空表示沿用当前值">
+          </label>
+          <button id="save-config-btn" class="primary" type="button">保存基础配置</button>
+        </div>
+      </div>
+
+      <div class="admin-grid">
+        <div class="stack">
+          <h2 class="section-title">设备编辑</h2>
+          <input id="device-id" type="hidden">
+          <label>
+            名称
+            <input id="device-name" type="text" placeholder="办公电脑">
+          </label>
+          <label>
+            MAC 地址
+            <input id="device-mac" type="text" placeholder="AA:BB:CC:DD:EE:FF">
+          </label>
+          <label>
+            广播地址
+            <input id="device-broadcast" type="text" placeholder="192.168.1.255">
+          </label>
+          <label>
+            端口
+            <input id="device-port" type="number" min="1" max="65535" placeholder="9">
+          </label>
+          <label>
+            备注
+            <textarea id="device-remark" placeholder="工位A / 说明"></textarea>
+          </label>
+          <div class="device-actions">
+            <button id="save-device-btn" class="primary" type="button">保存设备</button>
+            <button id="reset-device-btn" class="secondary" type="button">清空表单</button>
+          </div>
+        </div>
+
+        <div class="stack">
+          <h2 class="section-title">已配置设备</h2>
+          <div id="admin-device-list" class="admin-device-list"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = {
+      title: {{printf "%q" .Title}},
+      defaultPort: 9,
+      devices: [],
+      adminPassword: "",
+    };
+
+    const els = {
+      pageTitle: document.getElementById("page-title"),
+      status: document.getElementById("status"),
+      grid: document.getElementById("device-grid"),
+      adminPanel: document.getElementById("admin-panel"),
+      adminToggle: document.getElementById("admin-toggle"),
+      adminPassword: document.getElementById("admin-password"),
+      loadConfigBtn: document.getElementById("load-config-btn"),
+      saveConfigBtn: document.getElementById("save-config-btn"),
+      refreshBtn: document.getElementById("refresh-btn"),
+      wakeAllHint: document.getElementById("wake-all-hint"),
+      configTitle: document.getElementById("config-title"),
+      configDefaultPort: document.getElementById("config-default-port"),
+      configAdminPassword: document.getElementById("config-admin-password"),
+      deviceId: document.getElementById("device-id"),
+      deviceName: document.getElementById("device-name"),
+      deviceMac: document.getElementById("device-mac"),
+      deviceBroadcast: document.getElementById("device-broadcast"),
+      devicePort: document.getElementById("device-port"),
+      deviceRemark: document.getElementById("device-remark"),
+      saveDeviceBtn: document.getElementById("save-device-btn"),
+      resetDeviceBtn: document.getElementById("reset-device-btn"),
+      adminDeviceList: document.getElementById("admin-device-list"),
+    };
+
+    function setStatus(message, isError = false) {
+      els.status.textContent = message;
+      els.status.style.color = isError ? "var(--danger)" : "var(--muted)";
+    }
+
+    function adminHeaders() {
+      return {
+        "Content-Type": "application/json",
+        "X-Admin-Password": state.adminPassword,
+      };
+    }
+
+    async function request(url, options = {}) {
+      const response = await fetch(url, options);
+      const data = await response.json().catch(() => ({ ok: false, message: "服务器返回了非 JSON 响应" }));
+      if (!response.ok || !data.ok) {
+        throw new Error(data.message || "请求失败");
+      }
+      return data.data;
+    }
+
+    function renderDevices() {
+      els.pageTitle.textContent = state.title;
+      if (!state.devices.length) {
+        els.grid.innerHTML = '<div class="panel empty">还没有设备，先进入管理员面板添加配置。</div>';
+        return;
+      }
+
+      els.grid.innerHTML = state.devices.map((device) => `
+        <article class="panel card">
+          <h2 class="device-name">${escapeHTML(device.name)}</h2>
+          <div class="device-meta">
+            <span>MAC: ${escapeHTML(device.mac)}</span>
+            <span>广播: ${escapeHTML(device.broadcast)}:${escapeHTML(String(device.port))}</span>
+            <span>备注: ${escapeHTML(device.remark || "-")}</span>
+          </div>
+          <div class="device-actions">
+            <button class="primary" type="button" data-wake="${escapeHTML(device.id)}">唤醒</button>
+          </div>
+        </article>
+      `).join("");
+
+      document.querySelectorAll("[data-wake]").forEach((button) => {
+        button.addEventListener("click", () => wakeDevice(button.dataset.wake, button));
+      });
+    }
+
+    function renderAdminDevices() {
+      if (!state.devices.length) {
+        els.adminDeviceList.innerHTML = '<div class="empty">暂无设备</div>';
+        return;
+      }
+
+      els.adminDeviceList.innerHTML = state.devices.map((device) => `
+        <div class="admin-device-item">
+          <div>
+            <strong>${escapeHTML(device.name)}</strong>
+            <span class="tiny">${escapeHTML(device.mac)} | ${escapeHTML(device.broadcast)}:${escapeHTML(String(device.port))}</span>
+            <span class="tiny">${escapeHTML(device.remark || "")}</span>
+          </div>
+          <div class="device-actions">
+            <button class="secondary" type="button" data-edit="${escapeHTML(device.id)}">编辑</button>
+            <button class="danger" type="button" data-delete="${escapeHTML(device.id)}">删除</button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll("[data-edit]").forEach((button) => {
+        button.addEventListener("click", () => populateDevice(button.dataset.edit));
+      });
+      document.querySelectorAll("[data-delete]").forEach((button) => {
+        button.addEventListener("click", () => deleteDevice(button.dataset.delete));
+      });
+    }
+
+    function populateDevice(id) {
+      const device = state.devices.find((item) => item.id === id);
+      if (!device) return;
+      els.deviceId.value = device.id;
+      els.deviceName.value = device.name;
+      els.deviceMac.value = device.mac;
+      els.deviceBroadcast.value = device.broadcast;
+      els.devicePort.value = device.port;
+      els.deviceRemark.value = device.remark || "";
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }
+
+    function resetDeviceForm() {
+      els.deviceId.value = "";
+      els.deviceName.value = "";
+      els.deviceMac.value = "";
+      els.deviceBroadcast.value = "";
+      els.devicePort.value = state.defaultPort || 9;
+      els.deviceRemark.value = "";
+    }
+
+    async function loadDevices() {
+      setStatus("正在加载设备列表...");
+      try {
+        const data = await request("/api/devices");
+        state.title = data.title;
+        state.defaultPort = data.default_port;
+        state.devices = data.devices || [];
+        renderDevices();
+        renderAdminDevices();
+        if (!els.devicePort.value) {
+          els.devicePort.value = state.defaultPort;
+        }
+        setStatus(`已加载 ${state.devices.length} 台设备`);
+      } catch (error) {
+        renderDevices();
+        renderAdminDevices();
+        setStatus(error.message, true);
+      }
+    }
+
+    async function loadAdminConfig() {
+      state.adminPassword = els.adminPassword.value.trim();
+      if (!state.adminPassword) {
+        setStatus("请输入管理员口令", true);
+        return;
+      }
+      setStatus("正在读取管理配置...");
+      try {
+        const data = await request(`/api/admin/config?password=${encodeURIComponent(state.adminPassword)}`);
+        els.configTitle.value = data.title;
+        els.configDefaultPort.value = data.default_port;
+        els.configAdminPassword.value = "";
+        setStatus("管理配置已加载");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function saveConfig() {
+      state.adminPassword = els.adminPassword.value.trim();
+      if (!state.adminPassword) {
+        setStatus("请输入管理员口令", true);
+        return;
+      }
+      const nextPassword = els.configAdminPassword.value.trim() || state.adminPassword;
+      setStatus("正在保存基础配置...");
+      try {
+        const data = await request("/api/admin/config/save", {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({
+            title: els.configTitle.value.trim(),
+            admin_password: nextPassword,
+            default_port: Number(els.configDefaultPort.value || state.defaultPort || 9),
+          }),
+        });
+        state.title = data.title;
+        state.defaultPort = data.default_port;
+        state.adminPassword = nextPassword;
+        els.adminPassword.value = nextPassword;
+        els.configAdminPassword.value = nextPassword;
+        els.pageTitle.textContent = state.title;
+        if (!els.devicePort.value) {
+          els.devicePort.value = state.defaultPort;
+        }
+        setStatus("基础配置已保存");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function saveDevice() {
+      state.adminPassword = els.adminPassword.value.trim();
+      if (!state.adminPassword) {
+        setStatus("请输入管理员口令", true);
+        return;
+      }
+      setStatus("正在保存设备...");
+      try {
+        await request("/api/admin/device/save", {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({
+            id: els.deviceId.value.trim(),
+            name: els.deviceName.value.trim(),
+            mac: els.deviceMac.value.trim(),
+            broadcast: els.deviceBroadcast.value.trim(),
+            port: Number(els.devicePort.value || state.defaultPort || 9),
+            remark: els.deviceRemark.value.trim(),
+          }),
+        });
+        resetDeviceForm();
+        await loadDevices();
+        setStatus("设备已保存");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function deleteDevice(id) {
+      state.adminPassword = els.adminPassword.value.trim();
+      if (!state.adminPassword) {
+        setStatus("请输入管理员口令", true);
+        return;
+      }
+      if (!window.confirm("确认删除该设备？")) {
+        return;
+      }
+      setStatus("正在删除设备...");
+      try {
+        await request("/api/admin/device/delete", {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({ id }),
+        });
+        await loadDevices();
+        setStatus("设备已删除");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function wakeDevice(id, button) {
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "发送中...";
+      setStatus("正在发送唤醒指令...");
+      try {
+        const data = await request("/api/wake", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        setStatus(`${data.name}：已发送唤醒指令`);
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    }
+
+    function escapeHTML(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    els.adminToggle.addEventListener("click", () => {
+      els.adminPanel.classList.toggle("visible");
+    });
+    els.refreshBtn.addEventListener("click", loadDevices);
+    els.loadConfigBtn.addEventListener("click", loadAdminConfig);
+    els.saveConfigBtn.addEventListener("click", saveConfig);
+    els.saveDeviceBtn.addEventListener("click", saveDevice);
+    els.resetDeviceBtn.addEventListener("click", resetDeviceForm);
+    els.wakeAllHint.addEventListener("click", () => {
+      setStatus("WOL 仅负责发送魔术包；目标主机需要提前启用 BIOS、网卡和交换机相关配置。");
+    });
+
+    resetDeviceForm();
+    loadDevices();
+  </script>
+</body>
+</html>
