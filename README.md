@@ -1,6 +1,8 @@
 # WakeGo
 
 一个基于 Go 的局域网唤醒服务，内置 H5 页面，可直接查看设备、发送 Wake-on-LAN 魔术包，并在网页上维护设备配置。
+![alt text](docs/localhost_9090_.png)
+![h5demo](docs/localhost_9090_(iPhone 14 Pro Max).png)
 
 ## 功能
 
