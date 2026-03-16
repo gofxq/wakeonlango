@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${APP_HOME:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 BIN_DIR="${ROOT_DIR}/bin"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
@@ -105,7 +106,18 @@ install() {
 
 ensure_config() {
   if [[ ! -f "${CONFIG_FILE}" ]]; then
-    cp "${ROOT_DIR}/config.example.json" "${CONFIG_FILE}"
+    if [[ -f "${ROOT_DIR}/config.example.json" ]]; then
+      cp "${ROOT_DIR}/config.example.json" "${CONFIG_FILE}"
+    else
+      cat > "${CONFIG_FILE}" <<'EOF'
+{
+  "title": "WOL 控制台",
+  "admin_password": "123456",
+  "default_port": 9,
+  "devices": []
+}
+EOF
+    fi
     echo "[deploy] created default config at ${CONFIG_FILE}"
   fi
 }

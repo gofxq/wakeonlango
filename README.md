@@ -64,6 +64,15 @@ Release 标签格式默认是 `v0.0.<GitHub Run Number>`。
 REPO=owner/repo ./scripts/deploy.sh start
 ```
 
+`curl` 一键安装并启动示例：
+
+```bash
+mkdir -p ~/wakego && \
+curl -fsSL https://raw.githubusercontent.com/gofxq/wakeonlango/master/scripts/deploy.sh -o /tmp/wakego-deploy.sh && \
+chmod +x /tmp/wakego-deploy.sh && \
+APP_HOME=~/wakego REPO=gofxq/wakeonlango /tmp/wakego-deploy.sh start
+```
+
 常用命令：
 
 - `REPO=owner/repo ./scripts/deploy.sh install`
