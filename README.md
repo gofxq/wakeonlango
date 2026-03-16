@@ -1,13 +1,12 @@
-# WakeGo
+# WakeOnLanGo
 
 一个基于 Go 的局域网唤醒服务，内置 H5 页面，可直接查看设备、发送 Wake-on-LAN 魔术包，并在网页上维护设备配置。
 
-一键安装并启动示例：
+`curl` 一键安装并启用开机自启：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gofxq/wakeonlango/master/scripts/deploy.sh | bash -s -- start
+curl -fsSL https://raw.githubusercontent.com/gofxq/wakeonlango/master/scripts/deploy.sh | bash -s -- enable
 ```
-
 
 ![alt text](docs/localhost_9090_.png)
 ![h5demo](<docs/localhost_9090_(iPhone 14 Pro Max).png>)
@@ -64,13 +63,14 @@ Release 标签格式默认是 `v0.0.<GitHub Run Number>`。
 
 ## 一键部署
 
-部署脚本现在会先从 GitHub Release 下载当前机器对应的二进制，再用 `9090` 端口启动。
+部署脚本现在会先从 GitHub Release 下载当前机器对应的二进制。你可以手动 `start`，也可以用 `enable` 安装成开机自启服务。
 
 如果当前目录是这个仓库的 Git clone，脚本会复用当前目录；否则默认安装到 `~/wakego`，默认仓库是 `gofxq/wakeonlango`。
 
 ```bash
-./scripts/deploy.sh start
+./scripts/deploy.sh enable
 ```
+
 
 常用命令：
 
@@ -79,6 +79,8 @@ Release 标签格式默认是 `v0.0.<GitHub Run Number>`。
 - `./scripts/deploy.sh stop`
 - `./scripts/deploy.sh restart`
 - `./scripts/deploy.sh update`
+- `./scripts/deploy.sh enable`
+- `./scripts/deploy.sh disable`
 - `./scripts/deploy.sh status`
 - `./scripts/deploy.sh logs`
 
@@ -93,6 +95,13 @@ VERSION=v0.0.12 ./scripts/deploy.sh install
 ```bash
 APP_HOME=~/wakego-test ADDR=:8088 ./scripts/deploy.sh restart
 ```
+
+说明：
+
+- Linux 下优先安装 `systemd` 服务
+- macOS 下优先安装 `launchd`
+- 非 root 用户在 Linux 上会安装 user-level `systemd` 服务；若希望重启后未登录也自动运行，需执行 `sudo loginctl enable-linger $USER`
+- 非 root 用户在 macOS 上会安装 `LaunchAgent`，它会在用户登录后自动拉起；若需要系统级开机启动，请使用 `sudo`
 
 ## 配置文件
 

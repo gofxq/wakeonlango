@@ -29,6 +29,8 @@ LOG_DIR="${ROOT_DIR}/logs"
 TMP_DIR="${ROOT_DIR}/tmp"
 
 APP_NAME="wakego"
+SERVICE_LABEL="com.wakego.wakego"
+SYSTEMD_SERVICE_NAME="wakego.service"
 BIN_PATH="${BIN_DIR}/${APP_NAME}"
 PID_FILE="${RUN_DIR}/${APP_NAME}.pid"
 CONFIG_FILE="${ROOT_DIR}/config.json"
@@ -45,6 +47,59 @@ require_cmd() {
     echo "[deploy] missing required command: $1" >&2
     exit 1
   fi
+}
+
+write_systemd_unit() {
+  local service_file="$1"
+  local wanted_by="$2"
+  mkdir -p "$(dirname "${service_file}")"
+  cat > "${service_file}" <<EOF
+[Unit]
+Description=WakeGo Wake-on-LAN Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${ROOT_DIR}
+ExecStart=${BIN_PATH} -addr ${ADDR} -config ${CONFIG_FILE} -log-file ${LOG_FILE}
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=${wanted_by}
+EOF
+}
+
+write_launchd_plist() {
+  local plist_file="$1"
+  mkdir -p "$(dirname "${plist_file}")"
+  cat > "${plist_file}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>${SERVICE_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${BIN_PATH}</string>
+    <string>-addr</string>
+    <string>${ADDR}</string>
+    <string>-config</string>
+    <string>${CONFIG_FILE}</string>
+    <string>-log-file</string>
+    <string>${LOG_FILE}</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>${ROOT_DIR}</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>
+EOF
 }
 
 resolve_repo() {
@@ -153,7 +208,109 @@ is_running() {
   return 1
 }
 
+service_mode() {
+  if [[ -f "/etc/systemd/system/${SYSTEMD_SERVICE_NAME}" ]]; then
+    echo "systemd-system"
+    return 0
+  fi
+  if [[ -f "${HOME}/.config/systemd/user/${SYSTEMD_SERVICE_NAME}" ]]; then
+    echo "systemd-user"
+    return 0
+  fi
+  if [[ -f "/Library/LaunchDaemons/${SERVICE_LABEL}.plist" ]]; then
+    echo "launchd-system"
+    return 0
+  fi
+  if [[ -f "${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist" ]]; then
+    echo "launchd-user"
+    return 0
+  fi
+  return 1
+}
+
+start_managed_service() {
+  case "$(service_mode)" in
+    systemd-system)
+      systemctl start "${SYSTEMD_SERVICE_NAME}"
+      ;;
+    systemd-user)
+      systemctl --user start "${SYSTEMD_SERVICE_NAME}"
+      ;;
+    launchd-system)
+      launchctl bootout "system" "/Library/LaunchDaemons/${SERVICE_LABEL}.plist" >/dev/null 2>&1 || true
+      launchctl bootstrap "system" "/Library/LaunchDaemons/${SERVICE_LABEL}.plist"
+      launchctl enable "system/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+      ;;
+    launchd-user)
+      launchctl bootout "gui/$(id -u)" "${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist" >/dev/null 2>&1 || true
+      launchctl bootstrap "gui/$(id -u)" "${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
+      launchctl enable "gui/$(id -u)/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+      ;;
+  esac
+}
+
+stop_managed_service() {
+  case "$(service_mode)" in
+    systemd-system)
+      systemctl stop "${SYSTEMD_SERVICE_NAME}"
+      ;;
+    systemd-user)
+      systemctl --user stop "${SYSTEMD_SERVICE_NAME}"
+      ;;
+    launchd-system)
+      launchctl bootout "system" "/Library/LaunchDaemons/${SERVICE_LABEL}.plist"
+      ;;
+    launchd-user)
+      launchctl bootout "gui/$(id -u)" "${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
+      ;;
+  esac
+}
+
+restart_managed_service() {
+  case "$(service_mode)" in
+    systemd-system)
+      systemctl restart "${SYSTEMD_SERVICE_NAME}"
+      ;;
+    systemd-user)
+      systemctl --user restart "${SYSTEMD_SERVICE_NAME}"
+      ;;
+    launchd-system)
+      launchctl bootout "system" "/Library/LaunchDaemons/${SERVICE_LABEL}.plist" >/dev/null 2>&1 || true
+      launchctl bootstrap "system" "/Library/LaunchDaemons/${SERVICE_LABEL}.plist"
+      launchctl enable "system/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+      ;;
+    launchd-user)
+      launchctl bootout "gui/$(id -u)" "${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist" >/dev/null 2>&1 || true
+      launchctl bootstrap "gui/$(id -u)" "${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
+      launchctl enable "gui/$(id -u)/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+      ;;
+  esac
+}
+
+status_managed_service() {
+  case "$(service_mode)" in
+    systemd-system)
+      systemctl status "${SYSTEMD_SERVICE_NAME}" --no-pager
+      ;;
+    systemd-user)
+      systemctl --user status "${SYSTEMD_SERVICE_NAME}" --no-pager
+      ;;
+    launchd-system)
+      launchctl print "system/${SERVICE_LABEL}"
+      ;;
+    launchd-user)
+      launchctl print "gui/$(id -u)/${SERVICE_LABEL}"
+      ;;
+  esac
+}
+
 start() {
+  if service_mode >/dev/null 2>&1; then
+    start_managed_service
+    echo "[deploy] started managed service $(service_mode)"
+    return 0
+  fi
+
   if is_running; then
     echo "[deploy] ${APP_NAME} is already running with pid $(cat "${PID_FILE}")"
     return 0
@@ -177,6 +334,12 @@ start() {
 }
 
 stop() {
+  if service_mode >/dev/null 2>&1; then
+    stop_managed_service
+    echo "[deploy] stopped managed service $(service_mode)"
+    return 0
+  fi
+
   if ! is_running; then
     echo "[deploy] ${APP_NAME} is not running"
     rm -f "${PID_FILE}"
@@ -191,6 +354,11 @@ stop() {
 }
 
 status() {
+  if service_mode >/dev/null 2>&1; then
+    status_managed_service
+    return 0
+  fi
+
   if is_running; then
     echo "[deploy] ${APP_NAME} is running with pid $(cat "${PID_FILE}") on ${ADDR}"
   else
@@ -204,12 +372,27 @@ logs() {
 }
 
 restart() {
+  if service_mode >/dev/null 2>&1; then
+    restart_managed_service
+    echo "[deploy] restarted managed service $(service_mode)"
+    return 0
+  fi
+
   stop || true
   start
 }
 
 update() {
-  local was_running=0
+  local mode was_running=0
+  mode="$(service_mode || true)"
+
+  if [[ -n "${mode}" ]]; then
+    install
+    restart_managed_service
+    echo "[deploy] updated managed service ${mode}"
+    return 0
+  fi
+
   if is_running; then
     was_running=1
     stop
@@ -220,6 +403,121 @@ update() {
   if [[ "${was_running}" -eq 1 ]]; then
     start
   fi
+}
+
+enable_systemd() {
+  require_cmd systemctl
+
+  local service_file
+  if [[ "${EUID}" -eq 0 ]]; then
+    service_file="/etc/systemd/system/${SYSTEMD_SERVICE_NAME}"
+    write_systemd_unit "${service_file}" "multi-user.target"
+    systemctl daemon-reload
+    systemctl enable --now "${SYSTEMD_SERVICE_NAME}"
+    echo "[deploy] enabled systemd service ${SYSTEMD_SERVICE_NAME}"
+    return 0
+  fi
+
+  service_file="${HOME}/.config/systemd/user/${SYSTEMD_SERVICE_NAME}"
+  write_systemd_unit "${service_file}" "default.target"
+  systemctl --user daemon-reload
+  systemctl --user enable --now "${SYSTEMD_SERVICE_NAME}"
+  echo "[deploy] enabled user systemd service ${SYSTEMD_SERVICE_NAME}"
+  if command -v loginctl >/dev/null 2>&1; then
+    if ! loginctl show-user "${USER}" -p Linger 2>/dev/null | grep -q "Linger=yes"; then
+      echo "[deploy] note: run 'sudo loginctl enable-linger ${USER}' if you want reboot auto-start before login"
+    fi
+  fi
+}
+
+disable_systemd() {
+  require_cmd systemctl
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    systemctl disable --now "${SYSTEMD_SERVICE_NAME}" 2>/dev/null || true
+    rm -f "/etc/systemd/system/${SYSTEMD_SERVICE_NAME}"
+    systemctl daemon-reload
+    echo "[deploy] disabled systemd service ${SYSTEMD_SERVICE_NAME}"
+    return 0
+  fi
+
+  systemctl --user disable --now "${SYSTEMD_SERVICE_NAME}" 2>/dev/null || true
+  rm -f "${HOME}/.config/systemd/user/${SYSTEMD_SERVICE_NAME}"
+  systemctl --user daemon-reload
+  echo "[deploy] disabled user systemd service ${SYSTEMD_SERVICE_NAME}"
+}
+
+enable_launchd() {
+  require_cmd launchctl
+
+  local domain plist_file
+  if [[ "${EUID}" -eq 0 ]]; then
+    domain="system"
+    plist_file="/Library/LaunchDaemons/${SERVICE_LABEL}.plist"
+  else
+    domain="gui/$(id -u)"
+    plist_file="${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
+  fi
+
+  write_launchd_plist "${plist_file}"
+  launchctl bootout "${domain}" "${plist_file}" >/dev/null 2>&1 || true
+  launchctl bootstrap "${domain}" "${plist_file}"
+  launchctl enable "${domain}/${SERVICE_LABEL}" >/dev/null 2>&1 || true
+  echo "[deploy] enabled launchd job ${SERVICE_LABEL}"
+  if [[ "${EUID}" -ne 0 ]]; then
+    echo "[deploy] note: user LaunchAgent starts after login; use sudo for system-wide boot startup"
+  fi
+}
+
+disable_launchd() {
+  require_cmd launchctl
+
+  local domain plist_file
+  if [[ "${EUID}" -eq 0 ]]; then
+    domain="system"
+    plist_file="/Library/LaunchDaemons/${SERVICE_LABEL}.plist"
+  else
+    domain="gui/$(id -u)"
+    plist_file="${HOME}/Library/LaunchAgents/${SERVICE_LABEL}.plist"
+  fi
+
+  launchctl bootout "${domain}" "${plist_file}" >/dev/null 2>&1 || true
+  rm -f "${plist_file}"
+  echo "[deploy] disabled launchd job ${SERVICE_LABEL}"
+}
+
+enable() {
+  install
+  ensure_config
+  stop || true
+
+  case "$(uname -s)" in
+    Linux)
+      enable_systemd
+      ;;
+    Darwin)
+      enable_launchd
+      ;;
+    *)
+      echo "[deploy] enable is not supported on $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+disable() {
+  case "$(uname -s)" in
+    Linux)
+      disable_systemd
+      ;;
+    Darwin)
+      disable_launchd
+      ;;
+    *)
+      echo "[deploy] disable is not supported on $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
 }
 
 case "${COMMAND}" in
@@ -238,6 +536,12 @@ case "${COMMAND}" in
   update)
     update
     ;;
+  enable)
+    enable
+    ;;
+  disable)
+    disable
+    ;;
   status)
     status
     ;;
@@ -245,7 +549,7 @@ case "${COMMAND}" in
     logs
     ;;
   *)
-    echo "usage: $0 {install|start|stop|restart|update|status|logs}" >&2
+    echo "usage: $0 {install|start|stop|restart|update|enable|disable|status|logs}" >&2
     exit 1
     ;;
 esac
