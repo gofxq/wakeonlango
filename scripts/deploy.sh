@@ -1,8 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="${APP_HOME:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+DEFAULT_APP_HOME="${HOME}/wakego"
+SCRIPT_SOURCE="${BASH_SOURCE[0]:-}"
+resolve_root_dir() {
+  if [[ -n "${APP_HOME:-}" ]]; then
+    echo "${APP_HOME}"
+    return 0
+  fi
+
+  if [[ -n "${SCRIPT_SOURCE}" && "${SCRIPT_SOURCE}" != "bash" && -e "${SCRIPT_SOURCE}" ]]; then
+    local script_dir candidate
+    script_dir="$(cd "$(dirname "${SCRIPT_SOURCE}")" && pwd)"
+    candidate="$(cd "${script_dir}/.." && pwd)"
+    if [[ -f "${candidate}/config.example.json" || -d "${candidate}/.git" ]]; then
+      echo "${candidate}"
+      return 0
+    fi
+  fi
+
+  echo "${DEFAULT_APP_HOME}"
+}
+
+ROOT_DIR="$(resolve_root_dir)"
 BIN_DIR="${ROOT_DIR}/bin"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
@@ -15,7 +35,7 @@ CONFIG_FILE="${ROOT_DIR}/config.json"
 LOG_FILE="${LOG_DIR}/${APP_NAME}.log"
 ADDR="${ADDR:-:9090}"
 VERSION="${VERSION:-latest}"
-REPO="${REPO:-${GITHUB_REPO:-}}"
+REPO="${REPO:-${GITHUB_REPO:-gofxq/wakeonlango}}"
 COMMAND="${1:-start}"
 
 mkdir -p "${BIN_DIR}" "${RUN_DIR}" "${LOG_DIR}" "${TMP_DIR}"

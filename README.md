@@ -1,6 +1,14 @@
 # WakeGo
 
 一个基于 Go 的局域网唤醒服务，内置 H5 页面，可直接查看设备、发送 Wake-on-LAN 魔术包，并在网页上维护设备配置。
+
+一键安装并启动示例：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gofxq/wakeonlango/master/scripts/deploy.sh | bash -s -- start
+```
+
+
 ![alt text](docs/localhost_9090_.png)
 ![h5demo](<docs/localhost_9090_(iPhone 14 Pro Max).png>)
 
@@ -58,41 +66,32 @@ Release 标签格式默认是 `v0.0.<GitHub Run Number>`。
 
 部署脚本现在会先从 GitHub Release 下载当前机器对应的二进制，再用 `9090` 端口启动。
 
-如果当前目录是这个仓库的 Git clone，而且 `origin` 指向 GitHub，脚本会自动识别仓库。否则请显式传入：
+如果当前目录是这个仓库的 Git clone，脚本会复用当前目录；否则默认安装到 `~/wakego`，默认仓库是 `gofxq/wakeonlango`。
 
 ```bash
-REPO=owner/repo ./scripts/deploy.sh start
-```
-
-`curl` 一键安装并启动示例：
-
-```bash
-mkdir -p ~/wakego && \
-curl -fsSL https://raw.githubusercontent.com/gofxq/wakeonlango/master/scripts/deploy.sh -o /tmp/wakego-deploy.sh && \
-chmod +x /tmp/wakego-deploy.sh && \
-APP_HOME=~/wakego REPO=gofxq/wakeonlango /tmp/wakego-deploy.sh start
+./scripts/deploy.sh start
 ```
 
 常用命令：
 
-- `REPO=owner/repo ./scripts/deploy.sh install`
-- `REPO=owner/repo ./scripts/deploy.sh start`
-- `REPO=owner/repo ./scripts/deploy.sh stop`
-- `REPO=owner/repo ./scripts/deploy.sh restart`
-- `REPO=owner/repo ./scripts/deploy.sh update`
-- `REPO=owner/repo ./scripts/deploy.sh status`
-- `REPO=owner/repo ./scripts/deploy.sh logs`
+- `./scripts/deploy.sh install`
+- `./scripts/deploy.sh start`
+- `./scripts/deploy.sh stop`
+- `./scripts/deploy.sh restart`
+- `./scripts/deploy.sh update`
+- `./scripts/deploy.sh status`
+- `./scripts/deploy.sh logs`
 
 如需部署指定版本，可以传 `VERSION`：
 
 ```bash
-REPO=owner/repo VERSION=v0.0.12 ./scripts/deploy.sh install
+VERSION=v0.0.12 ./scripts/deploy.sh install
 ```
 
-如需修改端口，可以临时覆盖环境变量：
+如需修改端口或安装目录，可以临时覆盖环境变量：
 
 ```bash
-REPO=owner/repo ADDR=:8088 ./scripts/deploy.sh restart
+APP_HOME=~/wakego-test ADDR=:8088 ./scripts/deploy.sh restart
 ```
 
 ## 配置文件
