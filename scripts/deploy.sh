@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="${ROOT_DIR}/bin"
 RUN_DIR="${ROOT_DIR}/run"
 LOG_DIR="${ROOT_DIR}/logs"
-GOCACHE_DIR="${ROOT_DIR}/.gocache"
+TMP_DIR="${ROOT_DIR}/tmp"
 
 APP_NAME="wakego"
 BIN_PATH="${BIN_DIR}/${APP_NAME}"
@@ -13,13 +13,94 @@ PID_FILE="${RUN_DIR}/${APP_NAME}.pid"
 CONFIG_FILE="${ROOT_DIR}/config.json"
 LOG_FILE="${LOG_DIR}/${APP_NAME}.log"
 ADDR="${ADDR:-:9090}"
+VERSION="${VERSION:-latest}"
+REPO="${REPO:-${GITHUB_REPO:-}}"
 COMMAND="${1:-start}"
 
-mkdir -p "${BIN_DIR}" "${RUN_DIR}" "${LOG_DIR}" "${GOCACHE_DIR}"
+mkdir -p "${BIN_DIR}" "${RUN_DIR}" "${LOG_DIR}" "${TMP_DIR}"
 
-build() {
-  echo "[deploy] building ${APP_NAME}"
-  env GOCACHE="${GOCACHE_DIR}" go build -o "${BIN_PATH}" ./cmd/wakego
+require_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "[deploy] missing required command: $1" >&2
+    exit 1
+  fi
+}
+
+resolve_repo() {
+  if [[ -n "${REPO}" ]]; then
+    echo "${REPO}"
+    return 0
+  fi
+
+  if command -v git >/dev/null 2>&1 && git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    local remote
+    remote="$(git -C "${ROOT_DIR}" config --get remote.origin.url || true)"
+    if [[ "${remote}" =~ github\.com[:/]([^/]+/[^/.]+)(\.git)?$ ]]; then
+      echo "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  fi
+
+  echo "[deploy] set REPO=owner/repo or configure git remote.origin.url" >&2
+  exit 1
+}
+
+detect_os() {
+  case "$(uname -s)" in
+    Linux) echo "linux" ;;
+    Darwin) echo "darwin" ;;
+    *)
+      echo "[deploy] unsupported OS: $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64) echo "amd64" ;;
+    arm64|aarch64) echo "arm64" ;;
+    *)
+      echo "[deploy] unsupported ARCH: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+asset_name() {
+  local os arch
+  os="$(detect_os)"
+  arch="$(detect_arch)"
+  echo "${APP_NAME}_${os}_${arch}.tar.gz"
+}
+
+download_url() {
+  local repo asset
+  repo="$(resolve_repo)"
+  asset="$(asset_name)"
+
+  if [[ "${VERSION}" == "latest" ]]; then
+    echo "https://github.com/${repo}/releases/latest/download/${asset}"
+  else
+    echo "https://github.com/${repo}/releases/download/${VERSION}/${asset}"
+  fi
+}
+
+install() {
+  require_cmd curl
+  require_cmd tar
+
+  local archive url
+  archive="${TMP_DIR}/$(asset_name)"
+  url="$(download_url)"
+
+  echo "[deploy] downloading ${url}"
+  curl -fL --retry 3 --connect-timeout 10 -o "${archive}" "${url}"
+
+  mkdir -p "${BIN_DIR}"
+  tar -xzf "${archive}" -C "${BIN_DIR}"
+  chmod +x "${BIN_PATH}"
+  echo "[deploy] installed ${BIN_PATH}"
 }
 
 ensure_config() {
@@ -46,7 +127,7 @@ start() {
     return 0
   fi
 
-  build
+  install
   ensure_config
 
   echo "[deploy] starting ${APP_NAME} on ${ADDR}"
@@ -95,9 +176,23 @@ restart() {
   start
 }
 
+update() {
+  local was_running=0
+  if is_running; then
+    was_running=1
+    stop
+  fi
+
+  install
+
+  if [[ "${was_running}" -eq 1 ]]; then
+    start
+  fi
+}
+
 case "${COMMAND}" in
-  build)
-    build
+  install)
+    install
     ;;
   start)
     start
@@ -108,6 +203,9 @@ case "${COMMAND}" in
   restart)
     restart
     ;;
+  update)
+    update
+    ;;
   status)
     status
     ;;
@@ -115,7 +213,7 @@ case "${COMMAND}" in
     logs
     ;;
   *)
-    echo "usage: $0 {build|start|stop|restart|status|logs}" >&2
+    echo "usage: $0 {install|start|stop|restart|update|status|logs}" >&2
     exit 1
     ;;
 esac

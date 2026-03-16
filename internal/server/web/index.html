@@ -240,6 +240,32 @@
       border: 1px solid rgba(30,27,24,0.08);
     }
 
+    .scan-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .scan-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.64);
+      border: 1px solid rgba(30,27,24,0.08);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      background: rgba(15, 118, 110, 0.12);
+      color: var(--brand-strong);
+    }
+
     .admin-device-item strong,
     .admin-device-item span {
       display: block;
@@ -273,6 +299,11 @@
       }
 
       .admin-device-item {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .scan-item {
         flex-direction: column;
         align-items: stretch;
       }
@@ -364,6 +395,25 @@
           <div id="admin-device-list" class="admin-device-list"></div>
         </div>
       </div>
+
+      <div class="admin-grid">
+        <div class="stack">
+          <h2 class="section-title">局域网扫描</h2>
+          <label>
+            扫描网段 CIDR
+            <input id="scan-cidr" type="text" placeholder="192.168.1.0/24">
+          </label>
+          <div class="device-actions">
+            <button id="scan-btn" class="primary" type="button">扫描在线设备</button>
+          </div>
+          <p class="tiny">扫描依赖本机 ARP 表，只能发现当前同网段可通信的在线设备，无法保证覆盖所有已关机主机。</p>
+        </div>
+
+        <div class="stack">
+          <h2 class="section-title">扫描结果</h2>
+          <div id="scan-result-list" class="scan-list"></div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -373,6 +423,7 @@
       defaultPort: 9,
       devices: [],
       adminPassword: "",
+      scanResults: [],
     };
 
     const els = {
@@ -389,6 +440,9 @@
       configTitle: document.getElementById("config-title"),
       configDefaultPort: document.getElementById("config-default-port"),
       configAdminPassword: document.getElementById("config-admin-password"),
+      scanCidr: document.getElementById("scan-cidr"),
+      scanBtn: document.getElementById("scan-btn"),
+      scanResultList: document.getElementById("scan-result-list"),
       deviceId: document.getElementById("device-id"),
       deviceName: document.getElementById("device-name"),
       deviceMac: document.getElementById("device-mac"),
@@ -475,6 +529,35 @@
       });
     }
 
+    function renderScanResults() {
+      if (!state.scanResults.length) {
+        els.scanResultList.innerHTML = '<div class="empty">暂无扫描结果</div>';
+        return;
+      }
+
+      els.scanResultList.innerHTML = state.scanResults.map((host, index) => `
+        <div class="scan-item">
+          <div>
+            <strong>${escapeHTML(host.hostname || host.ip)}</strong>
+            <span class="tiny">IP: ${escapeHTML(host.ip)} | MAC: ${escapeHTML(host.mac)}</span>
+            <span class="tiny">广播: ${escapeHTML(host.broadcast)}</span>
+            ${host.configured ? '<span class="badge">已在配置中</span>' : ''}
+          </div>
+          <div class="device-actions">
+            <button class="secondary" type="button" data-fill-scan="${index}">填入表单</button>
+            <button class="primary" type="button" data-import-scan="${index}" ${host.configured ? "disabled" : ""}>${host.configured ? "已导入" : "快速导入"}</button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll("[data-fill-scan]").forEach((button) => {
+        button.addEventListener("click", () => fillScannedHost(Number(button.dataset.fillScan)));
+      });
+      document.querySelectorAll("[data-import-scan]").forEach((button) => {
+        button.addEventListener("click", () => importScannedHost(Number(button.dataset.importScan)));
+      });
+    }
+
     function populateDevice(id) {
       const device = state.devices.find((item) => item.id === id);
       if (!device) return;
@@ -494,6 +577,22 @@
       els.deviceBroadcast.value = "";
       els.devicePort.value = state.defaultPort || 9;
       els.deviceRemark.value = "";
+    }
+
+    function applyHostToForm(host) {
+      els.deviceId.value = "";
+      els.deviceName.value = host.hostname || `设备 ${host.ip}`;
+      els.deviceMac.value = host.mac;
+      els.deviceBroadcast.value = host.broadcast;
+      els.devicePort.value = state.defaultPort || 9;
+      els.deviceRemark.value = `扫描发现 IP: ${host.ip}`;
+    }
+
+    function fillScannedHost(index) {
+      const host = state.scanResults[index];
+      if (!host) return;
+      applyHostToForm(host);
+      setStatus(`已将 ${host.ip} 填入设备表单`);
     }
 
     async function loadDevices() {
@@ -528,6 +627,9 @@
         els.configTitle.value = data.title;
         els.configDefaultPort.value = data.default_port;
         els.configAdminPassword.value = "";
+        if (!els.scanCidr.value && Array.isArray(data.scan_defaults) && data.scan_defaults.length) {
+          els.scanCidr.value = data.scan_defaults[0];
+        }
         setStatus("管理配置已加载");
       } catch (error) {
         setStatus(error.message, true);
@@ -618,6 +720,69 @@
       }
     }
 
+    async function scanNetwork() {
+      state.adminPassword = els.adminPassword.value.trim();
+      if (!state.adminPassword) {
+        setStatus("请输入管理员口令", true);
+        return;
+      }
+      const cidr = els.scanCidr.value.trim();
+      if (!cidr) {
+        setStatus("请输入要扫描的 CIDR 网段，例如 192.168.1.0/24", true);
+        return;
+      }
+      els.scanBtn.disabled = true;
+      setStatus(`正在扫描 ${cidr}，这会读取本机 ARP 表...`);
+      try {
+        const data = await request("/api/admin/scan", {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({ cidr }),
+        });
+        state.scanResults = data.hosts || [];
+        renderScanResults();
+        setStatus(`扫描完成，发现 ${state.scanResults.length} 台设备`);
+      } catch (error) {
+        state.scanResults = [];
+        renderScanResults();
+        setStatus(error.message, true);
+      } finally {
+        els.scanBtn.disabled = false;
+      }
+    }
+
+    async function importScannedHost(index) {
+      const host = state.scanResults[index];
+      if (!host || host.configured) {
+        return;
+      }
+      state.adminPassword = els.adminPassword.value.trim();
+      if (!state.adminPassword) {
+        setStatus("请输入管理员口令", true);
+        return;
+      }
+      setStatus(`正在导入 ${host.ip}...`);
+      try {
+        await request("/api/admin/device/save", {
+          method: "POST",
+          headers: adminHeaders(),
+          body: JSON.stringify({
+            name: host.hostname || `设备 ${host.ip}`,
+            mac: host.mac,
+            broadcast: host.broadcast,
+            port: Number(els.devicePort.value || state.defaultPort || 9),
+            remark: `扫描发现 IP: ${host.ip}`,
+          }),
+        });
+        host.configured = true;
+        renderScanResults();
+        await loadDevices();
+        setStatus(`已导入 ${host.ip}`);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
     async function wakeDevice(id, button) {
       const original = button.textContent;
       button.disabled = true;
@@ -653,6 +818,7 @@
     els.refreshBtn.addEventListener("click", loadDevices);
     els.loadConfigBtn.addEventListener("click", loadAdminConfig);
     els.saveConfigBtn.addEventListener("click", saveConfig);
+    els.scanBtn.addEventListener("click", scanNetwork);
     els.saveDeviceBtn.addEventListener("click", saveDevice);
     els.resetDeviceBtn.addEventListener("click", resetDeviceForm);
     els.wakeAllHint.addEventListener("click", () => {
@@ -660,6 +826,7 @@
     });
 
     resetDeviceForm();
+    renderScanResults();
     loadDevices();
   </script>
 </body>

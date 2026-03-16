@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"wakego/internal/config"
+	"wakego/internal/scanner"
 	"wakego/internal/wol"
 
 	"github.com/gin-gonic/gin"
@@ -21,14 +23,16 @@ import (
 var webFiles embed.FS
 
 type Options struct {
-	Store  *config.Store
-	Logger *log.Logger
+	Store   *config.Store
+	Logger  *log.Logger
+	Scanner scanner.Engine
 }
 
 type Server struct {
-	store  *config.Store
-	logger *log.Logger
-	index  *template.Template
+	store   *config.Store
+	logger  *log.Logger
+	index   *template.Template
+	scanner scanner.Engine
 }
 
 type jsonResponse struct {
@@ -60,12 +64,19 @@ type saveConfigRequest struct {
 	DefaultPort   int    `json:"default_port"`
 }
 
+type scanRequest struct {
+	CIDR string `json:"cidr"`
+}
+
 func New(opts Options) (*gin.Engine, error) {
 	if opts.Store == nil {
 		return nil, errors.New("store is required")
 	}
 	if opts.Logger == nil {
 		opts.Logger = log.Default()
+	}
+	if opts.Scanner == nil {
+		opts.Scanner = scanner.New()
 	}
 
 	indexBytes, err := fs.ReadFile(webFiles, "web/index.html")
@@ -78,9 +89,10 @@ func New(opts Options) (*gin.Engine, error) {
 	}
 
 	s := &Server{
-		store:  opts.Store,
-		logger: opts.Logger,
-		index:  index,
+		store:   opts.Store,
+		logger:  opts.Logger,
+		index:   index,
+		scanner: opts.Scanner,
 	}
 
 	r := gin.New()
@@ -94,6 +106,7 @@ func New(opts Options) (*gin.Engine, error) {
 	r.POST("/api/admin/config/save", s.withAdmin(), s.handleSaveConfig)
 	r.POST("/api/admin/device/save", s.withAdmin(), s.handleSaveDevice)
 	r.POST("/api/admin/device/delete", s.withAdmin(), s.handleDeleteDevice)
+	r.POST("/api/admin/scan", s.withAdmin(), s.handleScanNetwork)
 
 	return r, nil
 }
@@ -155,8 +168,9 @@ func (s *Server) handleAdminConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, jsonResponse{
 		OK: true,
 		Data: map[string]interface{}{
-			"title":        cfg.Title,
-			"default_port": cfg.DefaultPort,
+			"title":         cfg.Title,
+			"default_port":  cfg.DefaultPort,
+			"scan_defaults": scanner.SuggestedCIDRs(cfg.Devices),
 		},
 	})
 }
@@ -232,6 +246,53 @@ func (s *Server) handleDeleteDevice(c *gin.Context) {
 	s.logger.Printf("device deleted id=%s", req.ID)
 
 	c.JSON(http.StatusOK, jsonResponse{OK: true, Message: "设备已删除"})
+}
+
+func (s *Server) handleScanNetwork(c *gin.Context) {
+	var req scanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, jsonResponse{OK: false, Message: err.Error()})
+		return
+	}
+
+	scanCtx, cancel := context.WithTimeout(c.Request.Context(), 8*time.Second)
+	defer cancel()
+
+	result, err := s.scanner.Scan(scanCtx, req.CIDR)
+	if err != nil {
+		s.logger.Printf("scan failed cidr=%q: %v", req.CIDR, err)
+		c.JSON(http.StatusBadRequest, jsonResponse{OK: false, Message: err.Error()})
+		return
+	}
+
+	devices := s.store.ListDevices()
+	known := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		known[strings.ToUpper(device.MAC)] = struct{}{}
+	}
+
+	hosts := make([]map[string]interface{}, 0, len(result.Hosts))
+	for _, host := range result.Hosts {
+		_, configured := known[strings.ToUpper(host.MAC)]
+		hosts = append(hosts, map[string]interface{}{
+			"ip":         host.IP,
+			"mac":        host.MAC,
+			"hostname":   host.Hostname,
+			"broadcast":  result.Broadcast,
+			"configured": configured,
+		})
+	}
+
+	s.logger.Printf("scan completed cidr=%s hosts=%d", result.CIDR, len(hosts))
+	c.JSON(http.StatusOK, jsonResponse{
+		OK:      true,
+		Message: "扫描完成",
+		Data: map[string]interface{}{
+			"cidr":      result.CIDR,
+			"broadcast": result.Broadcast,
+			"hosts":     hosts,
+		},
+	})
 }
 
 func (s *Server) withAdmin() gin.HandlerFunc {

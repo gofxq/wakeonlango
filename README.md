@@ -2,7 +2,7 @@
 
 一个基于 Go 的局域网唤醒服务，内置 H5 页面，可直接查看设备、发送 Wake-on-LAN 魔术包，并在网页上维护设备配置。
 ![alt text](docs/localhost_9090_.png)
-![h5demo](docs/localhost_9090_(iPhone 14 Pro Max).png)
+![h5demo](<docs/localhost_9090_(iPhone 14 Pro Max).png>)
 
 ## 功能
 
@@ -11,6 +11,7 @@
 - 页面标题、默认唤醒端口、管理员口令在线修改
 - 配置持久化到本地 JSON 文件，保存后立即生效
 - 访问日志、鉴权失败日志、设备与配置变更日志
+- 支持按 CIDR 扫描同网段在线设备并提取 MAC 地址候选
 - 单二进制部署，无第三方依赖
 
 ## 目录
@@ -43,26 +44,46 @@ go run ./cmd/wakego -addr :9090 -config ./config.json -log-file ./logs/wakego.lo
 go build -o wakego ./cmd/wakego
 ```
 
+## 自动发布
+
+仓库在 `master` 分支每次有新提交时，会触发 [release.yml](./.github/workflows/release.yml)：
+
+- 先执行 `go test ./...`
+- 再构建 `linux/darwin/windows` 的 `amd64/arm64` 二进制
+- 最后自动创建一个新的 GitHub Release，并上传对应平台压缩包
+
+Release 标签格式默认是 `v0.0.<GitHub Run Number>`。
+
 ## 一键部署
 
-默认用 `9090` 端口启动，适合本机调试：
+部署脚本现在会先从 GitHub Release 下载当前机器对应的二进制，再用 `9090` 端口启动。
+
+如果当前目录是这个仓库的 Git clone，而且 `origin` 指向 GitHub，脚本会自动识别仓库。否则请显式传入：
 
 ```bash
-./scripts/deploy.sh start
+REPO=owner/repo ./scripts/deploy.sh start
 ```
 
 常用命令：
 
-- `./scripts/deploy.sh start`
-- `./scripts/deploy.sh stop`
-- `./scripts/deploy.sh restart`
-- `./scripts/deploy.sh status`
-- `./scripts/deploy.sh logs`
+- `REPO=owner/repo ./scripts/deploy.sh install`
+- `REPO=owner/repo ./scripts/deploy.sh start`
+- `REPO=owner/repo ./scripts/deploy.sh stop`
+- `REPO=owner/repo ./scripts/deploy.sh restart`
+- `REPO=owner/repo ./scripts/deploy.sh update`
+- `REPO=owner/repo ./scripts/deploy.sh status`
+- `REPO=owner/repo ./scripts/deploy.sh logs`
+
+如需部署指定版本，可以传 `VERSION`：
+
+```bash
+REPO=owner/repo VERSION=v0.0.12 ./scripts/deploy.sh install
+```
 
 如需修改端口，可以临时覆盖环境变量：
 
 ```bash
-ADDR=:8088 ./scripts/deploy.sh restart
+REPO=owner/repo ADDR=:8088 ./scripts/deploy.sh restart
 ```
 
 ## 配置文件
@@ -94,6 +115,22 @@ ADDR=:8088 ./scripts/deploy.sh restart
 - `POST /api/admin/config/save`: 保存基础配置
 - `POST /api/admin/device/save`: 新增或更新设备
 - `POST /api/admin/device/delete`: 删除设备
+- `POST /api/admin/scan`: 扫描指定 CIDR 网段内当前可发现的设备
+
+`/api/admin/scan` 请求示例：
+
+```json
+{
+  "cidr": "192.168.1.0/24"
+}
+```
+
+说明：
+
+- 仅支持 IPv4 CIDR
+- 仅适合同网段扫描
+- 扫描结果来自轻量探测后的 ARP/邻居表，不保证包含所有关机设备
+- 单次扫描限制为最多 `1024` 个地址
 
 ## 部署建议
 

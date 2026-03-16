@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Tests
+        run: go test ./...
+
+      - name: Compute Release Tag
+        id: meta
+        run: |
+          tag="v0.0.${GITHUB_RUN_NUMBER}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "title=Release ${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build Release Artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          build_tar() {
+            local goos="$1"
+            local goarch="$2"
+            local dir="dist/${goos}_${goarch}"
+            local asset="dist/wakego_${goos}_${goarch}.tar.gz"
+
+            mkdir -p "${dir}"
+            GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "${dir}/wakego" ./cmd/wakego
+            tar -C "${dir}" -czf "${asset}" wakego
+          }
+
+          build_zip() {
+            local goos="$1"
+            local goarch="$2"
+            local dir="dist/${goos}_${goarch}"
+            local asset="dist/wakego_${goos}_${goarch}.zip"
+
+            mkdir -p "${dir}"
+            GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -ldflags="-s -w" -o "${dir}/wakego.exe" ./cmd/wakego
+            (
+              cd "${dir}"
+              zip -q "../$(basename "${asset}")" wakego.exe
+            )
+          }
+
+          build_tar linux amd64
+          build_tar linux arm64
+          build_tar darwin amd64
+          build_tar darwin arm64
+          build_zip windows amd64
+          build_zip windows arm64
+
+      - name: Publish GitHub Release
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          TITLE: ${{ steps.meta.outputs.title }}
+        run: |
+          set -euo pipefail
+          notes="Automated release for commit ${GITHUB_SHA}"
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" dist/* --clobber
+          else
+            gh release create "${TAG}" dist/* \
+              --title "${TITLE}" \
+              --notes "${notes}" \
+              --latest
+          fi
