@@ -155,3 +155,77 @@ APP_HOME=~/wakego-test ADDR=:8088 ./scripts/deploy.sh restart
 - 调试阶段可以直接使用 `9090` 端口
 - 若跨网段唤醒，需确认路由器支持定向广播
 - 目标主机需提前启用 BIOS/UEFI、网卡驱动和交换机相关的 WOL 配置
+
+## 远程安全控制（wakecloud + wakeagent）
+
+本仓库新增了两个可执行程序：
+
+- `cmd/wakecloud`: 公网远程控制服务端（TLS、命令签名、RBAC、限流、审计追加日志）
+- `cmd/wakeagent`: 本地 Agent（TLS 证书固定 pinning、命令验签、60 秒过期校验、nonce 防重放、本地白名单执行）
+
+### 交互流程图
+
+```mermaid
+flowchart TD
+    U[用户 Operator/Admin] -->|OIDC/MFA 或上游网关鉴权| C[wakecloud]
+    C -->|RBAC 校验 + 限流| C
+    C -->|签发命令 Ed25519 + iat/exp + nonce| Q[(命令队列)]
+    A[wakeagent] -->|TLS1.3 + 证书 Pinning\nX-Agent-Token| C
+    A -->|长轮询 pull| Q
+    Q -->|返回 command| A
+    A -->|验签 + 过期检查 + nonce 去重 + allowlist| E[本地执行 wake]
+    E -->|结果 ACK| C
+    C -->|追加写入 JSONL 审计日志| L[(Audit Log)]
+    C -->|失败告警| AL[Alert]
+```
+
+### 安全基线对应关系
+
+- TLS 1.3 + 证书固定（Agent 通过 `pinned_server_cert_sha256` 校验）
+- 设备身份（`X-Agent-Token`，可选 mTLS）
+- 命令 Ed25519 签名 + 60 秒过期 + nonce 去重
+- RBAC（`viewer/operator/admin`）
+- 速率限制（用户、Agent、IP 三层固定窗口）
+- 审计日志追加写入（JSON Lines）
+- 异常告警日志（重复 nonce、签名失败、执行失败）
+
+> 当前版本先提供可执行安全骨架。用户侧 OIDC + MFA 建议放在反向代理或 API Gateway（如 Authelia/Keycloak/Cloudflare Access）层接入。
+
+### 1) 准备密钥与证书
+
+生成 Ed25519 密钥（base64）：
+
+```bash
+go run ./scripts/gen_ed25519.go
+```
+
+生成 TLS 证书后，获取服务端证书 pin（SHA256 of DER）：
+
+```bash
+openssl x509 -in certs/server.crt -outform DER | sha256sum
+```
+
+### 2) 启动远程服务端
+
+参考 `cloud-config.example.json` 生成 `cloud-config.json`：
+
+```bash
+go run ./cmd/wakecloud -config ./cloud-config.json
+```
+
+关键 API：
+
+- `POST /api/v1/commands`（operator/admin 下发 wake 命令）
+- `GET /api/v1/agent/pull?agent_id=...`（agent 长轮询拉取）
+- `POST /api/v1/agent/ack`（agent 上报执行结果）
+- `GET /api/v1/commands/ack?command_id=...`（查看回执）
+
+### 3) 启动本地 Agent
+
+参考 `agent-config.example.json` 生成 `agent-config.json`：
+
+```bash
+go run ./cmd/wakeagent -agent-config ./agent-config.json -config ./config.json
+```
+
+Agent 只会执行 `allowed_device_ids` 中的设备唤醒，且必须通过签名、过期时间、nonce 校验。
