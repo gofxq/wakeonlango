@@ -1,0 +1,12 @@
+{
+  "remote_base_url": "https://wakecloud.example.com:9443",
+  "agent_id": "agent-home-lab",
+  "agent_token": "agent-token-1",
+  "pinned_server_cert_sha256": "REPLACE_WITH_SERVER_CERT_SHA256_HEX",
+  "server_public_key_base64": "REPLACE_WITH_ED25519_PUBLIC_KEY_BASE64",
+  "allowed_device_ids": [
+    "pc-1",
+    "nas-1"
+  ],
+  "poll_interval_ms": 1000
+}

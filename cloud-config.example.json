@@ -1,0 +1,28 @@
+{
+  "listen_addr": ":9443",
+  "tls_cert_file": "./certs/server.crt",
+  "tls_key_file": "./certs/server.key",
+  "enable_mtls": false,
+  "client_ca_file": "./certs/client-ca.crt",
+  "command_ttl_seconds": 60,
+  "private_key_base64": "REPLACE_WITH_ED25519_PRIVATE_KEY_BASE64",
+  "audit_log_file": "./logs/wakecloud-audit.log",
+  "users": [
+    {
+      "id": "alice",
+      "token": "token-operator-1",
+      "role": "operator"
+    },
+    {
+      "id": "bob",
+      "token": "token-viewer-1",
+      "role": "viewer"
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent-home-lab",
+      "token": "agent-token-1"
+    }
+  ]
+}
